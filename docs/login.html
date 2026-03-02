@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Auth App</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+body{
+  margin:0;
+  font-family:Arial;
+  background:linear-gradient(135deg,#0f2027,#203a43,#2c5364);
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  height:100vh;
+}
+.card{
+  background:#fff;
+  width:280px;
+  padding:25px ;
+  gap: 8px;
+  border-radius:16px;
+  box-shadow:0 10px 30px rgba(0,0,0,0.3);
+}
+h2{text-align:center;margin-bottom:15px}
+input{
+  width:80%;
+  padding:10px;
+  margin:6px 0;
+  border-radius:8px;
+  border:1px solid #ddd;
+}
+.password-box{
+  position:relative;
+}
+.eye{
+  position:absolute;
+  right:10px;
+  top:12px;
+  cursor:pointer;
+}
+button{
+  width:100%;
+  padding:10px;
+  margin-top:10px;
+  border:none;
+  border-radius:8px;
+  background:#0d6efd;
+  color:white;
+  font-weight:bold;
+  cursor:pointer;
+}
+.switch{
+  text-align:center;
+  margin-top:10px;
+  color:#0d6efd;
+  cursor:pointer;
+}
+.hidden{display:none}
+.points{
+  text-align:center;
+  margin-top:10px;
+  font-weight:bold;
+  color:green;
+}
+.logout{
+  background:#dc3545;
+}
+</style>
+</head>
+<body>
+
+<div class="card">
+
+<h2 id="title">Login</h2>
+
+<div id="loginBox">
+  <input type="email" id="loginEmail" placeholder="Email">
+  <div class="password-box">
+    <input type="password" id="loginPassword" placeholder="Password">
+    <span class="eye" onclick="togglePassword('loginPassword')">👁</span>
+  </div>
+  <div class="switch" onclick="forgotPassword()">Forgot Password?</div>
+  <button onclick="login()">Login</button>
+  <div class="switch" onclick="toggle()">No account? Register</div>
+</div>
+
+<div id="registerBox" class="hidden">
+  <input type="text" id="regName" placeholder="Name">
+  <input type="email" id="regEmail" placeholder="Email">
+  <div class="password-box">
+    <input type="password" id="regPassword" placeholder="Password">
+    <span class="eye" onclick="togglePassword('regPassword')">👁</span>
+  </div>
+  <div class="password-box">
+    <input type="password" id="regConfirm" placeholder="Confirm Password">
+    <span class="eye" onclick="togglePassword('regConfirm')">👁</span>
+  </div>
+  <button onclick="register()">Register</button>
+  <div class="switch" onclick="toggle()">Already have account? Login</div>
+</div>
+
+<div id="userBox" class="hidden">
+  <div id="welcome"></div>
+  <div class="points" id="pointsBox"></div>
+  <button class="logout" onclick="logout()">Logout</button>
+</div>
+
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { 
+  getAuth, 
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  signOut,
+  onAuthStateChanged,
+  sendPasswordResetEmail
+} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+
+import { 
+  getFirestore,
+  doc,
+  setDoc,
+  getDoc
+} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyB1MTh9KC8g9xwdEQ-XNbfGlC7qaOgLr6w",
+  authDomain: "idsa-4d2bc.firebaseapp.com",
+  projectId: "idsa-4d2bc",
+  storageBucket: "idsa-4d2bc.firebasestorage.app",
+  messagingSenderId: "374597166583",
+  appId: "1:374597166583:web:38bfc47310c0f47f687af2",
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+
+window.toggle = function(){
+  loginBox.classList.toggle("hidden");
+  registerBox.classList.toggle("hidden");
+  title.innerText = loginBox.classList.contains("hidden") ? "Register" : "Login";
+}
+
+window.togglePassword = function(id){
+  const input = document.getElementById(id);
+  input.type = input.type === "password" ? "text" : "password";
+}
+
+window.register = async function(){
+  const name = regName.value.trim();
+  const email = regEmail.value.trim();
+  const pass = regPassword.value;
+  const confirm = regConfirm.value;
+
+  if(pass !== confirm){
+    alert("Password not match");
+    return;
+  }
+
+  try{
+    const userCredential = await createUserWithEmailAndPassword(auth,email,pass);
+    const user = userCredential.user;
+
+    await setDoc(doc(db,"users",user.uid),{
+  name,
+  email,
+  points:0,
+  level:1,
+  createdAt:new Date()
+});
+
+window.location.href = "index.html";
+    alert("Register success ✅");
+
+  }catch(err){
+    alert(err.message);
+  }
+}
+
+window.login = async function(){
+  const email = loginEmail.value.trim();
+  const pass = loginPassword.value;
+
+  try{
+    await signInWithEmailAndPassword(auth,email,pass);
+window.location.href = "index.html";
+  }catch(err){
+    alert(err.message);
+  }
+}
+
+window.logout = async function(){
+  await signOut(auth);
+}
+
+window.forgotPassword = async function(){
+  const email = prompt("Enter your email:");
+  if(!email) return;
+
+  try{
+    await sendPasswordResetEmail(auth,email);
+    alert("Reset link sent to email ✅");
+  }catch(err){
+    alert(err.message);
+  }
+}
+
+onAuthStateChanged(auth, async(user)=>{
+  if(user){
+    loginBox.classList.add("hidden");
+    registerBox.classList.add("hidden");
+    userBox.classList.remove("hidden");
+
+    const docSnap = await getDoc(doc(db,"users",user.uid));
+    const data = docSnap.exists()? docSnap.data():{points:0};
+
+    welcome.innerText = "Welcome " + (data.name || user.email);
+    pointsBox.innerText = "Points: " + data.points;
+
+  }else{
+    userBox.classList.add("hidden");
+    loginBox.classList.remove("hidden");
+  }
+});
+</script>
+
+</body>
+</html>
