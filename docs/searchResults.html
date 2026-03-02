@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <title>Search Results</title>
+  <link rel="stylesheet" href="searchResults.css">
+</head>
+<body>
+
+<header id="siteHeader"></header>
+
+<section class="search-section">
+  <h2 id="searchTitle">ผลการค้นหา</h2>
+  <div id="searchResults" class="card-grid"></div>
+</section>
+
+<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
+
+<script>
+  // 🔥 Firebase Config ของคุณ
+  const firebaseConfig = {
+    apiKey: "AIzaSyB1MTh9KC8g9xwdEQ-XNbfGlC7qaOgLr6w",
+    authDomain: "idsa-4d2bc.firebaseapp.com",
+    projectId: "idsa-4d2bc"
+  };
+
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.firestore();
+
+  // ดึง keyword จาก URL
+  function getQueryParam(name) {
+    const urlParams = new URLSearchParams(window.location.search);
+    return urlParams.get(name);
+  }
+
+  const keyword = getQueryParam("q");
+
+  if(keyword){
+    document.getElementById("searchTitle").innerText =
+      "ผลการค้นหา: " + keyword;
+    searchProducts(keyword);
+  }
+
+  // 🔍 ค้นหาจริงจาก Firestore
+  async function searchProducts(keyword){
+
+    const resultBox = document.getElementById("searchResults");
+    resultBox.innerHTML = "กำลังค้นหา...";
+
+    const docSnap = await db.collection("games").doc("main").get();
+
+    if(!docSnap.exists){
+      resultBox.innerHTML = "<p class='not-found'>ไม่พบสินค้า</p>";
+      return;
+    }
+
+    const data = docSnap.data();
+    let html = "";
+    let found = false;
+
+    for(const key in data){
+
+      const game = data[key];
+      if(!game.name) continue;
+
+      if(game.name.toLowerCase().includes(keyword.toLowerCase())){
+
+        found = true;
+
+        if(game.active === false){
+          html += `
+            <div class="card disabled-card">
+              <h4>${game.name}</h4>
+              <p class="deleted">สินค้าถูกลบออกแล้ว</p>
+            </div>
+          `;
+        }else{
+          html += `
+            <div class="card" onclick="openGame('${key}')">
+              <img src="${game.image}" class="card-img">
+              <div class="card-body">
+                <h4>${game.name}</h4>
+                <p>${game.price} LAK</p>
+              </div>
+            </div>
+          `;
+        }
+      }
+    }
+
+    if(!found){
+      html = "<p class='not-found'>ไม่พบสินค้า</p>";
+    }
+
+    resultBox.innerHTML = html;
+  }
+
+  function openGame(key){
+    window.location.href = "game.html?id=" + key;
+  }
+</script>
+
+</body>
+</html>
