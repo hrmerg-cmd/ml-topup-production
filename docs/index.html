@@ -83,7 +83,7 @@
 </section>
 
 <!-- FOOTER -->
-<footer class="bg-light py-4 mt-5" id="siteFooter">
+<footer class="bg- py-4 mt-5" id="siteFooter">
   <div class="container">
     <div class="row" id="footer-content"></div>
     <div class="footer-bottom text-center mt-4" id="footer-bottom"></div>
@@ -93,6 +93,12 @@
 <!-- SCRIPT -->
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+  import { 
+  getFirestore,
+  doc,
+  getDoc
+} from 
+"https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { 
   getAuth, 
   signInWithEmailAndPassword, 
@@ -152,9 +158,19 @@ async function loadHeader() {
       <span class="d-none d-md-inline">${data.siteName}</span>
     </a>
       <!-- User Points + Login -->
-       <div class="d-flex align-items-center gap-2">
-  <span id="pointsBox">แต้มสะสม: 0</span>
-  <button class="btn btn-outline-success" id="loginBtn">Login</button>
+       <div class="d-flex align-items-center gap-2 " style="display="">
+        <div id="searchWrapper">
+  <button id="closeSearch" onclick="closeSearch()" class="btn btn-outline-primary">&larr;</button>
+ <input type="text" id="searchInput" placeholder="ค้นหา สินค้าและบริการ" class="form-control">
+<div id="searchResults" style="max-height:300px; overflow-y:auto;"></div>
+   <button onclick="handleSearch()" class="btn btn-outline-primary" type="submit" style="display:;"><i class="fa-solid fa-magnifying-glass"></i></button>
+   
+</div>
+       <!-- Search Button -->
+<button id="searchIcon" class="btn btn-outline-secondary" onclick="openSearch()">
+  <i class="fa-solid fa-magnifying-glass"></i>
+</button>
+    
 </div>
     <!-- Toggler -->
     <button class="navbar-toggler" type="button" data-bs-toggle="offcanvas" data-bs-target="#offcanvasNavbar" aria-controls="offcanvasNavbar">
@@ -179,9 +195,9 @@ async function loadHeader() {
         </ul>
 
         <!-- Search -->
-        <form class="d-flex mt-3" role="search" onsubmit="event.preventDefault(); handleSearch();">
-          <input class="form-control me-2" type="search" placeholder="ค้นหา สินค้าและบริการ" id="searchInput">
-          <button onclick="handleSearch()" class="btn btn-outline-primary" type="submit"><i class="fa-solid fa-magnifying-glass"></i></button>
+        <form class="d-flex mt-3" role="search" onsubmit="event.preventDefault(); handleSearch();" >
+         
+         
         </form>
 
       
@@ -204,14 +220,24 @@ const loginBtn = document.getElementById("loginBtn");
 loginBtn.addEventListener("click", handleLogin);
 }
 
-function openSearch(){
-  document.getElementById("searchModal").style.display = "flex";
-  document.getElementById("searchInput").focus();
+
+
+// เปิด search bar
+function openSearch() {
+  searchWrapper.classList.add("active");
+  searchInput.focus();
 }
 
+window.openSearch = openSearch;
 function closeSearch(){
-  document.getElementById("searchModal").style.display = "none";
+  searchWrapper.classList.remove("active"); // สำหรับ animation
+    setTimeout(() => {
+      searchWrapper.style.display = "";
+      searchInput.value = "";
+    }, 200); // ให้ animation จบก่อนปิด
 }
+window.closeSearch = closeSearch;
+
 
 // กด Enter เพื่อค้นหา
 document.addEventListener("DOMContentLoaded", function(){
@@ -230,6 +256,79 @@ document.addEventListener("keydown", function(e){
     closeSearch();
   }
 });
+
+// Object เก็บข้อมูลสินค้าที่โหลดจาก Firestore
+let allProducts = {};
+
+// โหลดสินค้าทุกประเภทแล้วเก็บไว้
+async function loadAllProducts() {
+  const sections = [
+    {id: "justForYou", tag: "just"},
+    {id: "newProducts", tag: "ใหม่"},
+    {id: "popularProducts", tag: "ยอดนิยม"},
+    {id: "vouchersGrid", tag: "voucher"},
+    {id: "directTopup", tag: "direct"}
+  ];
+
+  for (const sec of sections) {
+    try {
+      const docSnap = await db.collection("games").doc("main").get();
+      if (!docSnap.exists) continue;
+      const data = docSnap.data();
+      
+      // เก็บสินค้าแต่ละ section ลง allProducts
+      Object.values(data).forEach(p => {
+        // กรองตาม tag ของ section
+        if(!p.tags || !p.tags.includes(sec.tag)) return;
+        allProducts[p.name] = p;
+      });
+
+      // โหลดปกติ
+      loadProducts(sec.id, sec.tag);
+
+    } catch(err) {
+      console.error("Error loading products for", sec.id, err);
+    }
+  }
+}
+
+// Live Search
+const searchInput = document.getElementById("searchInput");
+const resultsBox = document.getElementById("searchResults");
+
+searchInput.addEventListener("input", () => {
+  const keyword = searchInput.value.trim().toLowerCase();
+  if(!keyword){
+    resultsBox.innerHTML = "";
+    return;
+  }
+
+  let html = "";
+  let found = false;
+
+  Object.values(allProducts).forEach(p => {
+    if(p.name.toLowerCase().includes(keyword)){
+      found = true;
+      html += `
+        <div class="search-item card mb-2 p-2 d-flex align-items-center" onclick="window.location.href='${p.link || "#"}'">
+          <img src="${p.image}" alt="${p.name}" style="width:60px;height:60px;object-fit:cover;margin-right:10px;">
+          <div>
+            <div>${p.name}</div>
+            <div class="text-muted">${p.price} LAK</div>
+          </div>
+        </div>
+      `;
+    }
+  });
+
+  if(!found) html = "❌ ไม่พบสินค้า";
+
+  resultsBox.innerHTML = html;
+});
+
+// เรียกตอนโหลดหน้า
+loadAllProducts();
+
 
 function handleSearch(){
   const keyword = document.getElementById("searchInput").value.trim();
@@ -416,36 +515,39 @@ rewardPoints(80000); // เช่น เติม 80,000₭ ได้ 80 แต�
   // ===== LOAD ABOUT =====
   async function loadAbout() {
   try {
-    const docSnap = await db.collection("abouts").doc("About1").get();
-    if(!docSnap.exists) return console.log("ไม่พบ about document");
+    const docSnap = await db.collection("abouts").doc("main").get();
+    if(!docSnap.exists){
+      console.log("ไม่พบ about document");
+      return;
+    }
 
-    const data = docSnap.data();
+    const abouts = docSnap.data(); // { about1:{...}, about2:{...}, ... }
 
-    const html = `
-     <div class="about-wrapper">
-  <div class="about-image">
-    ${data.image ? `<img src="${data.image}" alt="About Image">` : ""}
-  </div>
-
-  <div class="about-content">
-    <h3>${data.name || ""}</h3>
-    <p>${data.description || ""}</p>
-
-    ${data.button === true && data.buttonText ? 
-  `<a href="${data.buttonLink || "#"}" class="about-btn">
-    ${data.buttonText}
-  </a>` 
-
-    : ""}
-    
-  </div>
-</div>
-    `;
+    let html = "";
+    Object.keys(abouts).forEach(key => {
+      const item = abouts[key];
+      html += `
+        <div class="about-wrapper mb-4">
+          <div class="about-image">
+            ${item.image ? `<img src="${item.image}" alt="About">` : ""}
+          </div>
+          <div class="about-content">
+            <h3>${item.name || ""}</h3>
+            <p>${item.description || ""}</p>
+           ${item.button === true && item.buttonText ? 
+              `<a href="${item.buttonLink || '#'}" class="about-btn">
+                ${item.buttonText}
+              </a>` : ""}
+          </div>
+        </div>
+      `;
+    });
 
     document.getElementById("aboutContent").innerHTML = html;
 
-  } catch(error) {
+  } catch(error){
     console.error("Error loading about:", error);
+    document.getElementById("aboutContent").innerText = "เกิดข้อผิดพลาดในการโหลดข้อมูล";
   }
 }
   // ===== LOAD SLIDER =====
@@ -456,12 +558,12 @@ rewardPoints(80000); // เช่น เติม 80,000₭ ได้ 80 แต�
     let html = "";
     slides.forEach((s,i) => {
       html += `<div class="carousel-item ${i===0?'active':''}">
-                 <img src="${s.image}" class="d-block w-100 rounded">
+                 <img src="${s.image}" class="d-block  w-100 rounded">
                </div>`;
     });
     document.getElementById("sliderContainer").innerHTML = html;
     // Auto-slide 5 sec
-    const carousel = new bootstrap.Carousel(document.getElementById('mainSlider'), { interval: 5000 });
+    const carousel = new bootstrap.Carousel(document.getElementById('mainSlider'), { interval: 40000 });
   }
 
   // ===== LOAD PRODUCTS =====
