@@ -316,7 +316,7 @@ body {
 }
 
 #searchWrapper.active {
-  left: 20px; /* เลื่อนออกมา */
+  left: 5px; /* เลื่อนออกมา */
 }
 
 #searchWrapper input {
