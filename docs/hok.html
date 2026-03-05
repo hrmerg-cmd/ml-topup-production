@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Honor of Kings Topup</title>
+
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+
+<link href="hok.css" rel="stylesheet">
+</head>
+
+<body class="container py-4">
+
+<div class="text-center mb-4">
+  <img src="https://static-sg-eo.winudf.com/wupload/xy/aprojectadmin/ADepfpdY.png" class="icon-game">
+  <h2>Honor of Kings Topup</h2>
+</div>
+
+<h5>เลือกสินค้า</h5>
+<div class="row g-3 mb-4" id="productList"></div>
+
+<h5>เลือกวิธีชำระเงิน</h5>
+<div class="row g-3 mb-4" id="paymentList"></div>
+
+<div class="card p-3 mb-3">
+  <h6>Order Summary</h6>
+  <p>สินค้า: <span id="summaryProduct">ยังไม่ได้เลือก</span></p>
+  <p>โบนัส: <span id="summaryBonus">0</span></p>
+  <p>วิธีชำระ: <span id="summaryPayment">ยังไม่ได้เลือก</span></p>
+  <p>ค่าธรรมเนียม: <span id="summaryFee">0</span></p>
+  <p>รวมราคา: <span id="summaryTotal">0 LAK</span></p>
+</div>
+
+<div class="card p-3 mb-3">
+  <h6>คูปอง / UID</h6>
+  <input type="text" id="coupon" class="form-control mb-2" placeholder="Coupon">
+  <input type="text" id="uid" class="form-control mb-2" placeholder="กรอก UID">
+  <button class="btn btn-secondary w-100" onclick="checkUid()">ตรวจสอบ UID</button>
+  <div id="uidStatus" class="mt-2"></div>
+</div>
+
+<div class="card p-3 mb-3">
+  <h6>อีเมล์ติดต่อ</h6>
+  <input type="email" id="email" class="form-control" placeholder="example@email.com">
+</div>
+
+<button class="btn btn-primary w-100 mb-3" id="submitBtn" onclick="submitTopup()">ดำเนินการต่อ</button>
+<div id="status" class="status"></div>
+
+<!-- QR Modal -->
+<div class="modal fade" id="qrModal">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content p-4 text-center">
+      <h5>สแกน QR เพื่อชำระเงิน</h5>
+      <img id="qrImage" width="250" class="my-3">
+      <div id="countdown"></div>
+      <button class="btn btn-danger mt-3" onclick="cancelPayment()">ยกเลิก</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
+<script>
+// ================= FIREBASE =================
+const firebaseConfig = {
+  apiKey: "AIzaSyB1MTh9KC8g9xwdEQ-XNbfGlC7qaOgLr6w",
+  authDomain: "idsa-4d2bc.firebaseapp.com",
+  projectId: "idsa-4d2bc",
+  storageBucket: "idsa-4d2bc.firebasestorage.app",
+  messagingSenderId: "374597166583",
+  appId: "1:374597166583:web:38bfc47310c0f47f687af2",
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+// ================= GLOBAL =================
+let selectedProduct = null;
+let selectedPayment = null;
+let countdownInterval = null;
+
+// ================= LOAD PRODUCTS =================
+async function loadProducts(){
+  const container = document.getElementById("productList");
+  container.innerHTML = "";
+
+  const snapshot = await db.collection("getProducts").get();
+  snapshot.forEach(doc=>{
+    const p = doc.data();
+    const div = document.createElement("div");
+    div.className="col-6 col-md-3";
+    div.innerHTML = `
+      <div class="card select-card p-2 text-center">
+        ${p.image? `<img src="${p.image}" class="img-fluid mb-2">` : ''}
+        <h6>${p.name}</h6>
+     +   ${p.bonus? `<small class="text-success">โบนัส: ${p.bonus}</small><br>` : ''}
+        ${p.discountPercent? `<small class="text-danger">-${p.discountPercent}%</small><br>` : ''}
+        <span class="price">${p.price?.toLocaleString() || '0'} LAK</span>
+      </div>
+    `;
+
+    div.firstElementChild.onclick = ()=>{
+      document.querySelectorAll(".select-card").forEach(c=>c.classList.remove("selected"));
+      div.firstElementChild.classList.add("selected");
+      selectedProduct = {id: doc.id, ...p};
+      updateSummary();
+    };
+
+    container.appendChild(div);
+  });
+}
+
+
+// ================= LOAD PAYMENTS =================
+
+
+async function loadPayments(){
+  const container = document.getElementById("paymentList");
+  container.innerHTML = "";
+
+  const snapshot = await db.collection("getPaymentMethods").get();
+  snapshot.forEach(doc=>{
+    const p = doc.data();
+    const div = document.createElement("div");
+    div.className="col-6 col-md-3";
+    div.innerHTML = `
+      <div class="card select-card p-2 text-center">
+        ${p.icon? `<img src="${p.icon}" class="img-fluid mb-2" style="height:40px;">` : ''}
+        <h6>${p.name}</h6>
+        ${p.fee? `<small class="text-danger">ค่าธรรมเนียม: ${p.fee.toLocaleString()} LAK</small>` : ''}
+      </div>
+    `;
+
+    div.firstElementChild.onclick = ()=>{
+      document.querySelectorAll(".payment-selected").forEach(c=>c.classList.remove("payment-selected"));
+      div.firstElementChild.classList.add("payment-selected");
+      selectedPayment = {id: doc.id, ...p};
+      updateSummary();
+    };
+
+    container.appendChild(div);
+  });
+}
+
+function updateSummary(){
+  document.getElementById("summaryProduct").innerText = selectedProduct?.name || "ยังไม่ได้เลือก";
+  document.getElementById("summaryBonus").innerText = selectedProduct?.bonus || "0";
+  document.getElementById("summaryPayment").innerText = selectedPayment?.name || "ยังไม่ได้เลือก";
+  document.getElementById("summaryFee").innerText = selectedPayment?.fee?.toLocaleString() || "0";
+
+  let price = selectedProduct?.price || 0;
+  let discount = selectedProduct?.discountPercent ? price * selectedProduct.discountPercent / 100 : 0;
+  let fee = selectedPayment?.fee || 0;
+
+  document.getElementById("summaryTotal").innerText = (price - discount + fee).toLocaleString() + " LAK";
+}
+
+// =================== ตรวจสอบ UID ===================
+async function checkUid(uidValue) {
+  const status = document.getElementById("uidStatus");
+
+  if(uidValue.length < 20){
+    status.innerText = "UID ไม่ถูกต้อง";
+    status.className = "invalid";
+    return false;
+  }
+
+  status.innerText = "กำลังตรวจสอบ UID...";
+  status.className = "";
+
+  try {
+    const res = await fetch("https://your-game-server.com/api/checkUid", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ uid: uidValue })
+    });
+
+    if(!res.ok) throw new Error("ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์เกม");
+
+    const data = await res.json();
+
+    if(data.success){
+      status.innerText = `UID ถูกต้อง - ผู้เล่น: ${data.playerName} (Lv.${data.level})`;
+      status.className = "valid";
+      return true;
+    } else {
+      status.innerText = "UID ผิดพลาด / ไม่มีอยู่จริง";
+      status.className = "invalid";
+      return false;
+    }
+  } catch(err){
+    status.innerText = "เกิดข้อผิดพลาด: " + err.message;
+    status.className = "invalid";
+    return false;
+  }
+}
+
+// =================== ตรวจสอบเมื่อผู้ใช้พิมพ์ ===================
+const uidInput = document.getElementById("uid");
+uidInput.addEventListener("input", ()=>{
+  const value = uidInput.value.trim();
+  if(value.length >= 20){
+    checkUid(value);
+  } else {
+    const status = document.getElementById("uidStatus");
+    status.innerText = "UID ต้องมีอย่างน้อ 20 ตัวอักษร";
+    status.className = "invalid";
+  }
+});
+
+// ================== เรียกตอนโหลดหน้า ==================
+window.onload = () => {
+  startAutoCheckUid(0); // ตรวจสอบทุก 60 วินาที
+};
+// ================= SUBMIT =================
+// ส่งออเดอร์ไป Payment Gateway จริง
+async function submitTopup(){
+
+  const email = document.getElementById("email").value.trim();
+
+  if(!selectedProduct || !selectedPayment){
+    alert("กรุณาเลือกสินค้าและวิธีชำระ");
+    return;
+  }
+
+  if(email === ""){
+    alert("กรุณากรอกอีเมล");
+    return;
+  }
+
+  try {
+
+    const res = await fetch("https://api.topupgateway.com/createOrder", {
+      method:"POST",
+      headers:{
+        "Content-Type":"application/json"
+      },
+      body: JSON.stringify({
+        gameId: "hok",
+        productId: selectedProduct.id,
+        paymentMethod: selectedPayment.id,
+        email: email
+      })
+    });
+
+    const data = await res.json();
+
+    if(!data.success){
+      throw new Error(data.message || "สร้างคำสั่งซื้อไม่สำเร็จ");
+    }
+
+    // 🔥 ไปหน้า confirm.html พร้อม orderId
+    window.location.href = `confirm.html?orderId=${data.orderId}`;
+
+  } catch(err){
+    console.error(err);
+    alert("เกิดข้อผิดพลาด: " + err.message);
+  }
+}
+
+// ================= ERROR =================
+function showError(msg){
+  const status=document.getElementById("status");
+  status.className="status error";
+  status.innerText=msg;
+  status.style.display="block";
+}
+
+// ================= COUNTDOWN =================
+function startCountdown(modal){
+  let timeLeft=900;
+  countdownInterval=setInterval(()=>{
+    let min=Math.floor(timeLeft/60);
+    let sec=timeLeft%60;
+    document.getElementById("countdown").innerText=
+      `หมดอายุใน ${min}:${sec<10?'0':''}${sec}`;
+    timeLeft--;
+    if(timeLeft<=0){
+      clearInterval(countdownInterval);
+      modal.hide();
+    }
+  },1000);
+}
+
+function cancelPayment(){
+  clearInterval(countdownInterval);
+  bootstrap.Modal.getInstance(document.getElementById('qrModal')).hide();
+}
+
+// ================= INIT =================
+window.onload=()=>{
+  loadProducts();
+  loadPayments();
+};
+</script>
+
+</body>
+</html>
